@@ -1,0 +1,38 @@
+# MQTT client library
+paho-mqtt==1.6.1
+
+# InfluxDB client library
+influxdb-client==1.36.1
+
+# Data manipulation and analysis
+pandas==1.5.3
+
+# For HTTP requests (if needed for integrations)
+requests==2.28.2
+
+# For data serialization/deserialization
+PyYAML==6.0
+
+# For environment variable management
+python-dotenv==1.0.0
+
+# For more readable datetimes
+arrow==1.2.3
+
+# For data validation
+pydantic==1.10.7
+
+# For concurrent operations (if needed)
+asyncio==3.4.3
+
+# For logging (if you want more advanced logging capabilities)
+loguru==0.7.0
+
+# For unit testing
+pytest==7.3.1
+
+# For code linting
+flake8==6.0.0
+
+# For code formatting
+black==23.3.0
