@@ -172,6 +172,13 @@ sudo nano /etc/influxdb/influxdb.conf
 sudo systemctl restart influxdb
 ```
 
+5. Create InfluxDB database and user:
+
+```bash
+influx -execute "CREATE DATABASE healthcaredb"
+influx -execute "CREATE USER admin WITH PASSWORD 'your_secure_password' WITH ALL PRIVILEGES"
+```
+
 ## Step 8: Configure Grafana
 
 1. Open the Grafana configuration file:
