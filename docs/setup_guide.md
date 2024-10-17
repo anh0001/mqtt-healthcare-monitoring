@@ -148,7 +148,72 @@ listener.tcp.external = 0.0.0.0:1883
 sudo systemctl restart emqx
 ```
 
-## Step 7: Configure InfluxDB
+## Step 7: Create EMQX Connector to InfluxDB and Set Up Rule
+
+1. Access the EMQX Dashboard:
+   Open a web browser and navigate to `http://<NUC-IP-ADDRESS>:18083`
+   Default login: admin / public
+
+2. Create InfluxDB Connector:
+   - Go to "Data Integration" > "Connectors"
+   - Click "Create" and select "HTTP Server"
+   - Configure the connector:
+     - Name: `influxdb_connector`
+     - URL: `http://localhost:8086/write?db=healthcaredb`
+     - Method: POST
+     - Headers:
+       - Key: `Authorization`
+       - Value: `Basic <base64-encoded-credentials>`
+         (Replace <base64-encoded-credentials> with the actual base64 encoded string of "admin:your_secure_password")
+
+   To generate the base64-encoded credentials:
+   ```bash
+   echo -n "admin:your_secure_password" | base64
+   ```
+   Use the output of this command as the value for the Authorization header.
+
+   - Click "Test" to verify the connection, then "Create"
+
+3. Create EMQX Rule:
+   - Go to "Rules"
+   - Click "Create"
+   - In the SQL editor, enter a rule to process incoming messages:
+     ```sql
+     SELECT
+       payload.patientId as patient_id,
+       payload.data.heartRate as heart_rate,
+       payload.data.bloodPressure.systolic as systolic,
+       payload.data.bloodPressure.diastolic as diastolic,
+       payload.data.temperature as temperature,
+       payload.data.respiratoryRate as respiratory_rate,
+       payload.data.oxygenSaturation as oxygen_saturation,
+       payload.timestamp as timestamp,
+       topic as full_topic
+     FROM
+       "hospital/patients/data/#"
+     ```
+   - Under "Actions", click "Add Action"
+   - Select "Data to Web Server"
+   - Configure the action:
+     - Connector: Select the HTTP Server connector you created
+     - Payload template:
+       ```
+       patient_metrics,patient_id=${patient_id},topic=${full_topic} heart_rate=${heart_rate},systolic=${systolic},diastolic=${diastolic},temperature=${temperature},respiratory_rate=${respiratory_rate},oxygen_saturation=${oxygen_saturation} ${timestamp}
+       ```
+   - Click "Confirm" to add the action
+   - Click "Create" to finalize the rule
+
+4. Test the Rule:
+   - Use your Python script to publish messages to the MQTT broker
+   - Check the EMQX Dashboard for rule metrics to ensure it's processing messages
+   - Verify in InfluxDB that the data is being stored correctly
+
+   You can query InfluxDB to check if the data is being stored properly:
+   ```sql
+   SELECT * FROM patient_metrics ORDER BY time DESC LIMIT 10
+   ```
+
+## Step 8: Configure InfluxDB
 
 1. Open the InfluxDB configuration file:
 
@@ -179,7 +244,7 @@ influx -execute "CREATE DATABASE healthcaredb"
 influx -execute "CREATE USER admin WITH PASSWORD 'your_secure_password' WITH ALL PRIVILEGES"
 ```
 
-## Step 8: Configure Grafana
+## Step 9: Configure Grafana
 
 1. Open the Grafana configuration file:
 
@@ -203,7 +268,7 @@ http_port = 3000
 sudo systemctl restart grafana-server
 ```
 
-## Step 9: Set Up Python Applications
+## Step 10: Set Up Python Applications
 
 1. Clone your project repository:
 
@@ -251,7 +316,7 @@ sudo systemctl start mqtt-subscriber
 sudo systemctl enable mqtt-subscriber
 ```
 
-## Step 10: Verify the Setup
+## Step 11: Verify the Setup
 
 1. Check if all services are running:
 
@@ -273,7 +338,7 @@ sudo systemctl status emqx influxdb grafana-server mqtt-publisher mqtt-subscribe
 
 ## Conclusion
 
-You have now set up the MQTT Healthcare Monitoring System on your NUC device running Ubuntu 22.04. The system includes EMQX as the MQTT broker, InfluxDB for data storage, Grafana for visualization, and custom Python applications for data publishing and processing.
+You have now set up the MQTT Healthcare Monitoring System on your NUC device running Ubuntu 22.04. The system includes EMQX as the MQTT broker with a connector to InfluxDB, InfluxDB for data storage, Grafana for visualization, and custom Python applications for data publishing and processing.
 
 Remember to secure your system by setting up firewalls, implementing proper authentication for all services, and regularly updating your software. For production environments, consider setting up SSL/TLS for encrypted communications.
 
