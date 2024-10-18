@@ -10,37 +10,6 @@ print_message() {
     echo "----------------------------------------------------"
 }
 
-# Configure EMQX
-print_message "Configuring EMQX"
-sudo tee -a /etc/emqx/emqx.conf > /dev/null <<EOT
-allow_anonymous = false
-listener.tcp.external = 0.0.0.0:1883
-EOT
-sudo systemctl restart emqx
-
-# Configure InfluxDB
-print_message "Configuring InfluxDB"
-sudo tee -a /etc/influxdb/influxdb.conf > /dev/null <<EOT
-[http]
-  enabled = true
-  bind-address = ":8086"
-EOT
-sudo systemctl restart influxdb
-
-# Create InfluxDB database and user
-print_message "Creating InfluxDB database and user"
-influx -execute "CREATE DATABASE healthcaredb"
-influx -execute "CREATE USER admin WITH PASSWORD 'your_secure_password' WITH ALL PRIVILEGES"
-
-# Configure Grafana
-print_message "Configuring Grafana"
-sudo tee -a /etc/grafana/grafana.ini > /dev/null <<EOT
-[server]
-http_addr = 0.0.0.0
-http_port = 3000
-EOT
-sudo systemctl restart grafana-server
-
 # Set up Python application services
 print_message "Setting up Python application services"
 

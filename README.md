@@ -43,6 +43,7 @@ This project implements a healthcare monitoring system using MQTT protocol for r
 
 5. Access the services:
    - EMQX Dashboard: http://localhost:18083
+   - Influxdb2 Dashboard: http://localhost:8086
    - Grafana: http://localhost:3000
 
 ## Configuration

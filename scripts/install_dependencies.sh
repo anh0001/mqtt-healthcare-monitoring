@@ -25,15 +25,42 @@ sudo apt install -y emqx
 sudo systemctl start emqx
 sudo systemctl enable emqx
 
-# Install InfluxDB
-print_message "Installing InfluxDB"
+# Install InfluxDB2
+print_message "Installing InfluxDB2"
 wget -q https://repos.influxdata.com/influxdata-archive_compat.key
 echo '393e8779c89ac8d958f81f942f9ad7fb82a25e133faddaf92e15b16e6ac9ce4c influxdata-archive_compat.key' | sha256sum -c && cat influxdata-archive_compat.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null
 echo 'deb [signed-by=/etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg] https://repos.influxdata.com/debian stable main' | sudo tee /etc/apt/sources.list.d/influxdata.list
-sudo apt update
-sudo apt install -y influxdb
+sudo apt update 
+sudo apt install -y influxdb2
 sudo systemctl start influxdb
 sudo systemctl enable influxdb
+
+# Install Telegraf
+print_message "Installing Telegraf"
+sudo apt install -y telegraf
+sudo systemctl start telegraf
+sudo systemctl enable telegraf
+
+# Configure Telegraf
+print_message "Configuring Telegraf"
+sudo tee /etc/telegraf/telegraf.d/mqtt.conf > /dev/null <<EOL
+[[inputs.mqtt_consumer]]
+  servers = ["tcp://localhost:1883"]
+  topics = ["rt1/sensors"]
+  qos = 0
+  client_id = "telegraf"
+  data_format = "json"
+EOL
+
+sudo tee /etc/telegraf/telegraf.d/influxdb.conf > /dev/null <<EOL
+[[outputs.influxdb_v2]]
+  urls = ["http://localhost:8086"]
+  token = "9InQA0SCnf6GJrbHhZsAo7pSmfyUH9D1HwREpbHSCzB5dTm2cy9BJ2aE0R1TlGDOKSKnT2WIEyjoavi35VYENA=="
+  organization = "tmu"
+  bucket = "healthcare_monitoring"
+EOL
+
+sudo systemctl restart telegraf
 
 # Install Grafana
 print_message "Installing Grafana"
@@ -57,6 +84,7 @@ pip3 install paho-mqtt influxdb-client
 print_message "Verifying installations"
 systemctl is-active --quiet emqx && echo "EMQX is running" || echo "EMQX is not running"
 systemctl is-active --quiet influxdb && echo "InfluxDB is running" || echo "InfluxDB is not running"
+systemctl is-active --quiet telegraf && echo "Telegraf is running" || echo "Telegraf is not running"
 systemctl is-active --quiet grafana-server && echo "Grafana is running" || echo "Grafana is not running"
 
 print_message "Installation complete!"

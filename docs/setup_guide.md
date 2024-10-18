@@ -1,8 +1,8 @@
-# MQTT Healthcare Monitoring System Setup Guide
+# MQTT Healthcare Monitoring System Setup Guide (Updated)
 
 ## Overview
 
-This guide provides step-by-step instructions for setting up the MQTT Healthcare Monitoring System on a NUC device running Ubuntu 22.04. The system consists of EMQX (MQTT broker), InfluxDB (time-series database), Grafana (visualization platform), and custom Python applications.
+This guide provides step-by-step instructions for setting up the MQTT Healthcare Monitoring System on a NUC device running Ubuntu 22.04. The system consists of EMQX (MQTT broker), Telegraf (data collection and processing), InfluxDB (time-series database), Grafana (visualization platform), and custom Python applications.
 
 ## Prerequisites
 
@@ -46,9 +46,9 @@ sudo systemctl enable emqx
 sudo systemctl status emqx
 ```
 
-## Step 3: Install InfluxDB
+## Step 3: Install InfluxDB2
 
-1. Add InfluxData repository:
+1. Add InfluxData2 repository:
 
 ```bash
 wget -q https://repos.influxdata.com/influxdata-archive_compat.key
@@ -56,11 +56,11 @@ echo '393e8779c89ac8d958f81f942f9ad7fb82a25e133faddaf92e15b16e6ac9ce4c influxdat
 echo 'deb [signed-by=/etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg] https://repos.influxdata.com/debian stable main' | sudo tee /etc/apt/sources.list.d/influxdata.list
 ```
 
-2. Update package list and install InfluxDB:
+2. Update package list and install InfluxDB2:
 
 ```bash
 sudo apt update
-sudo apt install influxdb
+sudo apt install influxdb2
 ```
 
 3. Start InfluxDB and enable it to run on boot:
@@ -76,7 +76,28 @@ sudo systemctl enable influxdb
 sudo systemctl status influxdb
 ```
 
-## Step 4: Install Grafana
+## Step 4: Install Telegraf
+
+1. Add InfluxData GPG key:
+
+```bash
+wget -qO- https://repos.influxdata.com/influxdb.key | sudo apt-key add -
+```
+
+2. Add InfluxData repository:
+
+```bash
+echo "deb https://repos.influxdata.com/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/influxdata.list
+```
+
+3. Update package list and install Telegraf:
+
+```bash
+sudo apt update
+sudo apt install telegraf
+```
+
+## Step 5: Install Grafana
 
 1. Add Grafana repository:
 
@@ -111,7 +132,7 @@ sudo systemctl enable grafana-server
 sudo systemctl status grafana-server
 ```
 
-## Step 5: Install Python and Required Libraries
+## Step 6: Install Python and Required Libraries
 
 1. Install Python 3 and pip:
 
@@ -125,126 +146,50 @@ sudo apt install python3 python3-pip
 pip3 install paho-mqtt influxdb-client
 ```
 
-## Step 6: Configure EMQX
+## Step 7: Configure Telegraf
 
-1. Open the EMQX configuration file:
-
-```bash
-sudo nano /etc/emqx/emqx.conf
-```
-
-2. Add or modify the following settings:
-
-```
-allow_anonymous = false
-listener.tcp.external = 0.0.0.0:1883
-```
-
-3. Save the file and exit.
-
-4. Restart EMQX:
+1. Create a new configuration file for MQTT input:
 
 ```bash
-sudo systemctl restart emqx
+sudo nano /etc/telegraf/telegraf.d/mqtt.conf
 ```
 
-## Step 7: Create EMQX Connector to InfluxDB and Set Up Rule
+2. Add the following content:
 
-1. Access the EMQX Dashboard:
-   Open a web browser and navigate to `http://<NUC-IP-ADDRESS>:18083`
-   Default login: admin / public
+```toml
+[[inputs.mqtt_consumer]]
+  servers = ["tcp://localhost:1883"]     # Change to your MQTT broker address
+  topics = ["rt1/sensors"]               # Topics to subscribe to
+  qos = 0                                # Quality of Service level
+  client_id = "telegraf"                 # Unique client ID
+  #username = "your_mqtt_username"        # MQTT username (if required)
+  #password = "your_mqtt_password"        # MQTT password (if required)
+  data_format = "json"                   # Data format of the incoming messages
+```
 
-2. Create InfluxDB Connector:
-   - Go to "Data Integration" > "Connectors"
-   - Click "Create" and select "HTTP Server"
-   - Configure the connector:
-     - Name: `influxdb_connector`
-     - URL: `http://localhost:8086/write?db=healthcaredb`
-     - Method: POST
-     - Headers:
-       - Key: `Authorization`
-       - Value: `Basic <base64-encoded-credentials>`
-         (Replace <base64-encoded-credentials> with the actual base64 encoded string of "admin:your_secure_password")
-
-   To generate the base64-encoded credentials:
-   ```bash
-   echo -n "admin:your_secure_password" | base64
-   ```
-   Use the output of this command as the value for the Authorization header.
-
-   - Click "Test" to verify the connection, then "Create"
-
-3. Create EMQX Rule:
-   - Go to "Rules"
-   - Click "Create"
-   - In the SQL editor, enter a rule to process incoming messages:
-     ```sql
-     SELECT
-       payload.patientId as patient_id,
-       payload.data.heartRate as heart_rate,
-       payload.data.bloodPressure.systolic as systolic,
-       payload.data.bloodPressure.diastolic as diastolic,
-       payload.data.temperature as temperature,
-       payload.data.respiratoryRate as respiratory_rate,
-       payload.data.oxygenSaturation as oxygen_saturation,
-       payload.timestamp as timestamp,
-       topic as full_topic
-     FROM
-       "hospital/patients/data/#"
-     ```
-   - Under "Actions", click "Add Action"
-   - Select "Data to Web Server"
-   - Configure the action:
-     - Connector: Select the HTTP Server connector you created
-     - Payload template:
-       ```
-       patient_metrics,patient_id=${patient_id},topic=${full_topic} heart_rate=${heart_rate},systolic=${systolic},diastolic=${diastolic},temperature=${temperature},respiratory_rate=${respiratory_rate},oxygen_saturation=${oxygen_saturation} ${timestamp}
-       ```
-   - Click "Confirm" to add the action
-   - Click "Create" to finalize the rule
-
-4. Test the Rule:
-   - Use your Python script to publish messages to the MQTT broker
-   - Check the EMQX Dashboard for rule metrics to ensure it's processing messages
-   - Verify in InfluxDB that the data is being stored correctly
-
-   You can query InfluxDB to check if the data is being stored properly:
-   ```sql
-   SELECT * FROM patient_metrics ORDER BY time DESC LIMIT 10
-   ```
-
-## Step 8: Configure InfluxDB
-
-1. Open the InfluxDB configuration file:
+3. Create a new configuration file for InfluxDB output:
 
 ```bash
-sudo nano /etc/influxdb/influxdb.conf
+sudo nano /etc/telegraf/telegraf.d/influxdb.conf
 ```
 
-2. Ensure the following settings are correct:
+4. Add the following content:
 
+```toml
+[[outputs.influxdb_v2]]
+  urls = ["http://localhost:8086"]       # InfluxDB URL
+  token = "9InQA0SCnf6GJrbHhZsAo7pSmfyUH9D1HwREpbHSCzB5dTm2cy9BJ2aE0R1TlGDOKSKnT2WIEyjoavi35VYENA=="  # InfluxDB API token
+  organization = "tmu"                   # InfluxDB organization name
+  bucket = "healthcare_monitoring"       # InfluxDB bucket name
 ```
-[http]
-  enabled = true
-  bind-address = ":8086"
-```
 
-3. Save the file and exit.
-
-4. Restart InfluxDB:
+5. Restart Telegraf to apply changes:
 
 ```bash
-sudo systemctl restart influxdb
+sudo systemctl restart telegraf
 ```
 
-5. Create InfluxDB database and user:
-
-```bash
-influx -execute "CREATE DATABASE healthcaredb"
-influx -execute "CREATE USER admin WITH PASSWORD 'your_secure_password' WITH ALL PRIVILEGES"
-```
-
-## Step 9: Configure Grafana
+## Step 8: Configure Grafana
 
 1. Open the Grafana configuration file:
 
@@ -268,7 +213,7 @@ http_port = 3000
 sudo systemctl restart grafana-server
 ```
 
-## Step 10: Set Up Python Applications
+## Step 9: Set Up Python Applications
 
 1. Clone your project repository:
 
@@ -316,34 +261,49 @@ sudo systemctl start mqtt-subscriber
 sudo systemctl enable mqtt-subscriber
 ```
 
-## Step 11: Verify the Setup
+## Step 10: Verify the Setup
 
 1. Check if all services are running:
 
 ```bash
-sudo systemctl status emqx influxdb grafana-server mqtt-publisher mqtt-subscriber
+sudo systemctl status emqx influxdb telegraf grafana-server mqtt-publisher mqtt-subscriber
 ```
 
-2. Access the Grafana web interface:
+2. Check Telegraf logs for errors:
+
+```bash
+sudo journalctl -u telegraf -f
+```
+
+3. Access the Grafana web interface:
    Open a web browser and navigate to `http://<NUC-IP-ADDRESS>:3000`
    Default login: admin / admin
 
-3. Add InfluxDB as a data source in Grafana:
+4. Add InfluxDB as a data source in Grafana:
    - Go to Configuration > Data Sources
    - Add a new InfluxDB data source
    - Set the URL to `http://localhost:8086`
-   - Set the database name you created in InfluxDB
+   - Set the organization and bucket name you created in InfluxDB
+   - Use the API token you generated for authentication
 
-4. Create dashboards in Grafana to visualize your healthcare monitoring data.
+5. Create dashboards in Grafana to visualize your healthcare monitoring data.
 
 ## Conclusion
 
-You have now set up the MQTT Healthcare Monitoring System on your NUC device running Ubuntu 22.04. The system includes EMQX as the MQTT broker with a connector to InfluxDB, InfluxDB for data storage, Grafana for visualization, and custom Python applications for data publishing and processing.
+You have now set up the MQTT Healthcare Monitoring System on your NUC device running Ubuntu 22.04. The system includes EMQX as the MQTT broker, Telegraf for data collection and processing, InfluxDB for data storage, Grafana for visualization, and custom Python applications for data publishing and processing.
 
 Remember to secure your system by setting up firewalls, implementing proper authentication for all services, and regularly updating your software. For production environments, consider setting up SSL/TLS for encrypted communications.
 
-For troubleshooting and further configuration, refer to the official documentation of each component:
+## Troubleshooting
+
+- If Telegraf fails to start, run `telegraf --config /etc/telegraf/telegraf.conf --test` to test the configuration.
+- If no data appears in InfluxDB, ensure that the MQTT broker is publishing messages to the topics you've subscribed to.
+- For authentication errors, double-check your MQTT username/password and InfluxDB token.
+- If data isn't parsed correctly, adjust the `data_format` settings in the Telegraf MQTT input configuration.
+
+For further configuration and troubleshooting, refer to the official documentation of each component:
 
 - EMQX: https://www.emqx.io/docs/en/v4.3/
 - InfluxDB: https://docs.influxdata.com/influxdb/v2.0/
+- Telegraf: https://docs.influxdata.com/telegraf/v1.21/
 - Grafana: https://grafana.com/docs/grafana/latest/
